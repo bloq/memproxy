@@ -115,7 +115,7 @@ fn req_get(
 
     match state.memclient.get::<Vec<u8>>(&path.0) {
         Ok(optval) => match optval {
-            Some(val) => ok_binary(val.to_vec()),
+            Some(val) => ok_binary(val),
             None => err_not_found(), // db: value not found
         },
         Err(_e) => err_500(), // db: error
