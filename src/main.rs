@@ -73,12 +73,21 @@ fn ok_json(jval: serde_json::Value) -> Result<HttpResponse> {
 
 /// simple root index handler, describes our service
 #[get("/")]
-fn req_index(
-) -> Result<HttpResponse> {
+fn req_index() -> Result<HttpResponse> {
     ok_json(json!({
         "name": APPNAME,
         "version": VERSION,
     }))
+}
+
+#[get("/stats")]
+fn req_stats(m_state: web::Data<Arc<Mutex<ServerState>>>) -> Result<HttpResponse> {
+    let mut state = m_state.lock().unwrap();
+
+    match state.memclient.stats() {
+        Ok(val) => ok_json(json!(val)),
+        Err(_e) => err_500(), // db: error
+    }
 }
 
 /// DELETE data item.  key in URI path.  returned ok as json response
@@ -90,9 +99,9 @@ fn req_delete(
 
     match state.memclient.delete(&path.0) {
         Ok(optval) => match optval {
-	    true => ok_json(json!({ "result": true })),
+            true => ok_json(json!({ "result": true })),
             false => err_not_found(), // db: value not found
-	}
+        },
         Err(_e) => err_500(), // db: error
     }
 }
@@ -204,6 +213,7 @@ fn main() -> io::Result<()> {
             .wrap(middleware::Logger::default())
             // register our routes
             .service(req_index)
+            .service(req_stats)
             .service(
                 web::resource("/cache/{key}")
                     .route(web::get().to(req_get))

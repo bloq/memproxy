@@ -57,3 +57,8 @@ Integration testing is performed via a separate binary, `tester`.
 $ cargo run --bin tester
 ```
 
+## Miscellaneous notes
+
+* If the TCP connection to memcached is broken (eg. memcached restarts),
+  the rust memcache library does not recover (does not start a new
+  TCP connection).
