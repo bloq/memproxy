@@ -13,7 +13,7 @@ use std::sync::{Arc, Mutex};
 use std::{env, fs, io};
 
 use actix_web::http::StatusCode;
-use actix_web::{guard, middleware, web, App, HttpRequest, HttpResponse, HttpServer, Result};
+use actix_web::{guard, middleware, web, App, HttpResponse, HttpServer, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
@@ -74,10 +74,7 @@ fn ok_json(jval: serde_json::Value) -> Result<HttpResponse> {
 /// simple root index handler, describes our service
 #[get("/")]
 fn req_index(
-    req: HttpRequest,
 ) -> Result<HttpResponse> {
-    println!("{:?}", req);
-
     ok_json(json!({
         "name": APPNAME,
         "version": VERSION,
@@ -87,11 +84,8 @@ fn req_index(
 /// DELETE data item.  key in URI path.  returned ok as json response
 fn req_delete(
     m_state: web::Data<Arc<Mutex<ServerState>>>,
-    req: HttpRequest,
     path: web::Path<(String,)>,
 ) -> Result<HttpResponse> {
-    println!("{:?}", req);
-
     let mut state = m_state.lock().unwrap();
 
     match state.memclient.delete(&path.0) {
@@ -106,11 +100,8 @@ fn req_delete(
 /// GET data item.  key in URI path.  returned value as binary response
 fn req_get(
     m_state: web::Data<Arc<Mutex<ServerState>>>,
-    req: HttpRequest,
     path: web::Path<(String,)>,
 ) -> Result<HttpResponse> {
-    println!("{:?}", req);
-
     let mut state = m_state.lock().unwrap();
 
     match state.memclient.get::<Vec<u8>>(&path.0) {
@@ -125,11 +116,8 @@ fn req_get(
 /// PUT data item.  key in URI path, value in HTTP payload.
 fn req_put(
     m_state: web::Data<Arc<Mutex<ServerState>>>,
-    req: HttpRequest,
     (path, body): (web::Path<(String,)>, web::Bytes),
 ) -> Result<HttpResponse> {
-    println!("{:?}", req);
-
     let mut state = m_state.lock().unwrap();
 
     match state.memclient.set(&path.0, &body[..], 0) {
