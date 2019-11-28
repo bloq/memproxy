@@ -1,8 +1,8 @@
 /*
- * tester: Integration tester for kvapp
+ * tester: Integration tester for memproxy
  *
- * To be run separately from kvapp, assuming a clean and empty db:
- * $ cargo run --bin kvapp
+ * To be run separately from memproxy, assuming a clean and empty db:
+ * $ cargo run --bin memproxy
  * $ cargo run --bin tester
  */
 

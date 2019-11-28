@@ -1,6 +1,6 @@
 [package]
-name = "kvapp"
-version = "1.0.0"
+name = "memproxy"
+version = "0.0.1"
 authors = ["jgarzik"]
 edition = "2018"
 publish = false
@@ -21,7 +21,7 @@ clap = "^2.33.0"
 reqwest = "^0.9.20"
 
 [[bin]]
-name = "kvapp"
+name = "memproxy"
 path = "src/main.rs"
 
 [[bin]]
