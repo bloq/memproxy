@@ -1,12 +1,11 @@
 #[macro_use]
 extern crate actix_web;
 extern crate clap;
+extern crate memcache;
 
 const APPNAME: &'static str = "memproxy";
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 const DEF_CFG_FN: &'static str = "cfg-memproxy.json";
-const DEF_DB_NAME: &'static str = "db";
-const DEF_DB_DIR: &'static str = "db.kv";
 const DEF_BIND_ADDR: &'static str = "127.0.0.1";
 const DEF_BIND_PORT: &'static str = "8080";
 
@@ -17,22 +16,19 @@ use actix_web::http::StatusCode;
 use actix_web::{guard, middleware, web, App, HttpRequest, HttpResponse, HttpServer, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use sled::{ConfigBuilder, Db};
 
 #[derive(Serialize, Deserialize)]
-struct DbConfig {
-    name: String,
-    path: String,
+struct UpstreamConfig {
+    endpoint: String,
 }
 
 #[derive(Serialize, Deserialize)]
 struct ServerConfig {
-    databases: Vec<DbConfig>,
+    upstream: Vec<UpstreamConfig>,
 }
 
 struct ServerState {
-    name: String, // db nickname
-    db: Db,       // open db handle
+    memclient: memcache::Client,
 }
 
 // helper function, 404 not found
@@ -78,19 +74,13 @@ fn ok_json(jval: serde_json::Value) -> Result<HttpResponse> {
 /// simple root index handler, describes our service
 #[get("/")]
 fn req_index(
-    m_state: web::Data<Arc<Mutex<ServerState>>>,
     req: HttpRequest,
 ) -> Result<HttpResponse> {
     println!("{:?}", req);
 
-    let state = m_state.lock().unwrap();
-
     ok_json(json!({
         "name": APPNAME,
         "version": VERSION,
-        "databases": [
-            { "name": state.name }
-        ]
     }))
 }
 
@@ -98,42 +88,32 @@ fn req_index(
 fn req_delete(
     m_state: web::Data<Arc<Mutex<ServerState>>>,
     req: HttpRequest,
-    path: web::Path<(String, String)>,
+    path: web::Path<(String,)>,
 ) -> Result<HttpResponse> {
     println!("{:?}", req);
 
-    let state = m_state.lock().unwrap();
+    let mut state = m_state.lock().unwrap();
 
-    // we only support 1 db, for now...  user must specify db name
-    if state.name != path.0 {
-        return err_not_found();
-    }
-
-    match state.db.remove(path.1.clone()) {
+    match state.memclient.delete(&path.0) {
         Ok(optval) => match optval {
-            Some(_val) => ok_json(json!({"result": true})),
-            None => err_not_found(), // db: value not found
-        },
+	    true => ok_json(json!({ "result": true })),
+            false => err_not_found(), // db: value not found
+	}
         Err(_e) => err_500(), // db: error
     }
 }
 
-/// GET data item.  key in URI path.  returned value as json response
+/// GET data item.  key in URI path.  returned value as binary response
 fn req_get(
     m_state: web::Data<Arc<Mutex<ServerState>>>,
     req: HttpRequest,
-    path: web::Path<(String, String)>,
+    path: web::Path<(String,)>,
 ) -> Result<HttpResponse> {
     println!("{:?}", req);
 
-    let state = m_state.lock().unwrap();
+    let mut state = m_state.lock().unwrap();
 
-    // we only support 1 db, for now...  user must specify db name
-    if state.name != path.0 {
-        return err_not_found();
-    }
-
-    match state.db.get(path.1.clone()) {
+    match state.memclient.get::<Vec<u8>>(&path.0) {
         Ok(optval) => match optval {
             Some(val) => ok_binary(val.to_vec()),
             None => err_not_found(), // db: value not found
@@ -142,22 +122,17 @@ fn req_get(
     }
 }
 
-/// PUT data item.  key and value both in URI path.
+/// PUT data item.  key in URI path, value in HTTP payload.
 fn req_put(
     m_state: web::Data<Arc<Mutex<ServerState>>>,
     req: HttpRequest,
-    (path, body): (web::Path<(String, String)>, web::Bytes),
+    (path, body): (web::Path<(String,)>, web::Bytes),
 ) -> Result<HttpResponse> {
     println!("{:?}", req);
 
-    let state = m_state.lock().unwrap();
+    let mut state = m_state.lock().unwrap();
 
-    // we only support 1 db, for now...  user must specify db name
-    if state.name != path.0 {
-        return err_not_found();
-    }
-
-    match state.db.insert(path.1.as_str(), body.to_vec()) {
+    match state.memclient.set(&path.0, &body[..], 0) {
         Ok(_optval) => ok_json(json!({"result": true})),
         Err(_e) => err_500(), // db: error
     }
@@ -175,8 +150,7 @@ fn main() -> io::Result<()> {
     // parse command line
     let cli_matches = clap::App::new(APPNAME)
         .version(VERSION)
-        .author("Jeff Garzik <jgarzik@pobox.com>")
-        .about("Database server for key/value db")
+        .about("Microservice REST wrapper for memcached")
         .arg(
             clap::Arg::with_name("config")
                 .short("c")
@@ -221,27 +195,12 @@ fn main() -> io::Result<()> {
     let cfg_text = fs::read_to_string(cfg_fn)?;
     let server_cfg: ServerConfig = serde_json::from_str(&cfg_text)?;
 
-    // special case, until we have multiple dbs: find first db config, use it
-    let db_name;
-    let db_path;
-    if server_cfg.databases.len() == 0 {
-        db_name = String::from(DEF_DB_NAME);
-        db_path = String::from(DEF_DB_DIR);
-    } else {
-        db_name = server_cfg.databases[0].name.clone();
-        db_path = server_cfg.databases[0].path.clone();
-    }
-
-    // configure & open db
-    let db_config = ConfigBuilder::new()
-        .path(db_path)
-        .use_compression(false)
-        .build();
-    let db = Db::start(db_config).unwrap();
+    // we only support 1 upstream, for now
+    assert_eq!(server_cfg.upstream.len(), 1);
+    let memhost = format!("memcache://{}", server_cfg.upstream[0].endpoint);
 
     let srv_state = Arc::new(Mutex::new(ServerState {
-        name: db_name.clone(),
-        db: db.clone(),
+        memclient: memcache::Client::connect(memhost).unwrap(),
     }));
 
     // configure web server
@@ -258,7 +217,7 @@ fn main() -> io::Result<()> {
             // register our routes
             .service(req_index)
             .service(
-                web::resource("/api/{db}/{key}")
+                web::resource("/cache/{key}")
                     .route(web::get().to(req_get))
                     .route(web::put().to(req_put))
                     .route(web::delete().to(req_delete)),

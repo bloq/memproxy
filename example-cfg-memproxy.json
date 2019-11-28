@@ -1,8 +1,7 @@
 {
-	"databases": [
+	"upstream": [
 		{
-			"name": "db",
-			"path": "db.kv"
+			"endpoint": "127.0.0.1:11211"
 		}
 	]
 }
