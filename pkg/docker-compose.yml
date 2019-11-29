@@ -1,0 +1,19 @@
+version: '3'
+
+networks:
+  app-tier:
+
+services:
+  memcached-proxy:
+    image: memproxy:latest
+    command: memproxy --config /conf/cfg-memproxy.json --bind-addr 0.0.0.0
+    volumes:
+    - /tmp/conf:/conf
+    ports: [ '8080:8080' ]
+    networks:
+    - app-tier
+  memcached:
+    image: memcached
+    networks:
+    - app-tier
+
