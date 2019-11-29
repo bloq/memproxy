@@ -3,10 +3,20 @@ Microservice wrapping HTTP REST around memcached protocol.
 
 ## Using memproxy
 
+### From rust cargo
+
 Standard rust cargo multi-binary setup:
 ```
 $ cargo build
 $ cargo run --bin memproxy
+```
+
+### From docker
+
+```
+$ mkdir -p /tmp/conf && cp cfg-memproxy.json /tmp/conf
+$ docker run --rm -p 8080:8080 -v /tmp/conf:/conf memproxy memproxy --bind-addr 0.0.0.0 --config /conf/cfg-memproxy.json
+$ curl http://127.0.0.1:8080/ | json_pp
 ```
 
 ## Server configuration
@@ -63,4 +73,5 @@ $ cargo run --bin tester
 * If the TCP connection to memcached is broken (eg. memcached restarts),
   the rust memcache library does not recover (does not start a new
   TCP connection).
+* If memcached is not reachable, program will not start.
 
