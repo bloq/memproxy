@@ -11,8 +11,8 @@ $ cargo run --bin memproxy
 
 ## Server configuration
 
-A JSON configuration file is required, to specify database.  Command line 
-options are also available.
+A JSON configuration file is required, to specify memcached configuration.
+Command line options are also available.
 
 ### Configuration file
 
@@ -31,24 +31,25 @@ $ cargo run --bin memproxy -- --help
 
 Connect to HTTP endpoint using any web client.
 
-### API: Service identity and status
+### API: Service identity
 
-```
-$ curl http://localhost:8080/
-```
+GET /
 
-Returns JSON describing service:
-```
-{
-   "databases" : [
-      {
-         "name" : "db"
-      }
-   ],
-   "version" : "0.1.0",
-   "name" : "memproxy"
-}
-```
+### API: Stats and health check
+
+GET /stats
+
+### API: Get cache entry
+
+GET /cache/$KEY
+
+### API: Put cache entry
+
+PUT /cache/$KEY
+
+### API: Delete cache entry
+
+DELETE /cache/$KEY
 
 ## Testing
 
@@ -62,3 +63,4 @@ $ cargo run --bin tester
 * If the TCP connection to memcached is broken (eg. memcached restarts),
   the rust memcache library does not recover (does not start a new
   TCP connection).
+
