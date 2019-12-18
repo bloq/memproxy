@@ -1,0 +1,40 @@
+version: '3'
+
+networks:
+  app-tier:
+
+volumes:
+  certs:
+
+services:
+  memproxy:
+    image: bloq/memproxy:latest
+    command: memproxy --config /conf/cfg-memproxy.json --bind-addr 0.0.0.0
+    volumes:
+    - /home/memuser/conf:/conf
+    networks:
+    - app-tier
+    depends_on:
+    - memcached
+  memcached:
+    image: memcached
+    networks:
+    - app-tier
+  ssl-proxy:
+    image: justsml/ssl-proxy:latest
+    environment:
+    - CERT_PUBLIC_PATH=/certs/cert-bundle.pem
+    - CERT_PRIVATE_PATH=/certs/privkey.pem
+    - SERVER_NAME=cache.example.com
+    - UPSTREAM_TARGET=memproxy:8080
+    - HTTPS_PORT=443
+    - USERNAME=memuser
+    - PASSWORD=XXXreplacemeXXX
+    volumes:
+    - /home/memuser/ssl:/certs
+    ports: [ '443:443' ]
+    networks:
+    - app-tier
+    depends_on:
+    - memproxy
+
